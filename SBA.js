@@ -77,86 +77,170 @@ const CourseInfo = {
     }
   ];
   
-  function getLearnerData(Course, Group, LearnerSubmission) {
-    // here, we would process this data to achieve the desired result.
-    let result;
-
-    if(doesAssignmentGroupMatch(Course,Group))
-    { 
+////////             main            //////////
+//////                         ////////////////
+  function getLearnerData(Course, assignmentGroup, Submissions) {
    
-
+    //let result;
+    const groupedSubmissions = seperateLearnersSubmissionsByID(Submissions)
+    if(doesAssignmentGroupMatch(Course,assignmentGroup))
+    { 
+      return processSpecificLearnerGrades(assignmentGroup, groupedSubmissions)
     }
-  
-
-    return result;
+    else
+    {
+      console.log(`assignment group does not match`)
+    }
   }
   
+/// test assignment group matching course ID /////
   function doesAssignmentGroupMatch (Courseinfo, AssignmentGroup){
-    let result = false;
-  try {
-     if(Courseinfo.id === AssignmentGroup.course_id){
-       result = true;
-      console.log('true')
-     }
-  
-   } 
-   catch (error) {
-    if(Courseinfo.id !== AssignmentGroup.course_id){
-       result = false;
-      console.log('false')
-
-    throw new error('Assignment Group ID does not match Course ID');
-    
+    try {
+      if (Courseinfo.id === AssignmentGroup.course_id) {
+        return true;
+      }
+      return false;
+    } catch (error) {
+      throw new Error('Assignment Group ID doesnt match Course ID');
     }
-  
-    } 
-  finally {
-    //sss
   }
 
-  return result;
-  }
+    // figured out how to turn the date into a date object to compare
+    function isAssignmentDue(assignment, learnerSubmission) {
+      let dueDate = new Date(assignment.due_at)
+
+      let submittedDate = new Date()
+      return dueDate <= submittedDate;
+    }
+    function isSubmissionLate(assignment, learnerSubmission) {
+      let dueDate = new Date(assignment.due_at)
+
+      let submittedDate = new Date(learnerSubmission.submission.submitted_at);
+      return submittedDate > dueDate;
+    }
 
 
-// seperatre them by their learner id and make a new array of their grades
-  function seperateLearnersSubmissionsByID(LearnerSubmissions)
-  {
+function isAssignmentValid(assignmentGroup, submissionId) {
 
-    // tbh idk whati m doing here that well i just copied what this guy did https://www.youtube.com/watch?v=s1XVfm5mIuU
-    // my goal is to create an array seperated by the unique learner id while still retaining all the submission info.
+  const assignment = assignmentGroup.assignments.find(array => array.id === submissionId);
 
-    const result = LearnerSubmissions.reduce((groupedLearners, learner) => {
-      const learnerID = learner.learner_id
-      if (groupedLearners[learnerID] == null) groupedLearners[learnerID] = [] // creates a new array if this learner id is not already created
-      groupedLearners[learnerID].push(learner) /// makes the new array 
-      return groupedLearners
-    }, {})
-    console.log(result)
-    // OUT PUT OF THIS 
-  // { 
-//   '125': [
-//     { learner_id: 125, assignment_id: 1, submission: [Object] },
-//     { learner_id: 125, assignment_id: 2, submission: [Object] },
-//     { learner_id: 125, assignment_id: 3, submission: [Object] }
-//   ],
-//   '132': [
-//     { learner_id: 132, assignment_id: 1, submission: [Object] },
-//     { learner_id: 132, assignment_id: 2, submission: [Object] }
-//   ]
-// }
-console.log(result["125"][0].submission)
-//  output { submitted_at: '2023-01-25', score: 47 }
-  }
-
-
-//grade the speicfic learners grades 
-  function processSpecificLearnerGrades(AssignmentGroup, SeperateLearnerSubmission)
-  {
+  if (!assignment) {
     
+    throw new Error("Assignment not found");
+    return null;
+  }
+
+  return assignment;
+}
+
+////////////// make invidual data of students by their id ///////////////
+   // tbh idk whati m doing here that well i just copied what this guy did https://www.youtube.com/watch?v=s1XVfm5mIuU
+    // my goal is to create an array seperated by the unique learner id while still retaining all the submission info.
+    // I REAZLIZED I DONT EVEN NEED THIS 
+
+function seperateLearnersSubmissionsByID(LearnerSubmissions)
+{
+     const result = LearnerSubmissions.reduce((groupedLearners, learner) => {
+      const learnerID = learner.learner_id;
+      if (groupedLearners[learnerID] == null) groupedLearners[learnerID] = [];
+      groupedLearners[learnerID].push(learner);
+      return groupedLearners;
+    }, {});
+                  const learnerSubmissionsArray = Object.keys(result).map(learnerID => {
+                    return result[learnerID];
+                  });
+      //console.log(learnersubmissions)
+                  // returns that output without the '125 and '132' idk if this is the right way but we will press on!!! 
+    return learnerSubmissionsArray;
+}
+
+
+//grade the speicfic learners grades  /////////////
+
+
+  function processSpecificLearnerGrades(assignmentGroup, groupedSubmissions)
+  {
+    const results = []
+    // array.foreach(function name) // (element, index ,array)
+    groupedSubmissions.forEach(learnerGroup => {
+      const learnerId = learnerGroup[0].learner_id;
+     // console.log(`current learner id: ${learnerId}`); // seperates the ids 
+
+      const learnerResult =
+      {
+        id: learnerId,
+      
+      };
+      let totalWeightedScore = 0;
+      let totalPointsPossible = 0;
+
+      // nested for loop  using the seperated ids
+      learnerGroup.forEach(learnerSubmission => {
+        
+        const currentAssignment = isAssignmentValid(assignmentGroup, learnerSubmission.assignment_id);
+        if (!isAssignmentDue(currentAssignment,learnerSubmission)) {
+         // console.log (`Assignment: ${currentAssignment.id} not due yet`)
+          return; // 
+        }
+     
+        let score = learnerSubmission.submission.score;
+        
+        // Apply late penalty if submitted after due date
+        if (isSubmissionLate(currentAssignment, learnerSubmission)) {
+          const lateDeduction = currentAssignment.points_possible * 0.1;
+          score = Math.max(0, score - lateDeduction);
+          console.log(`"${currentAssignment.name}",ID: ${currentAssignment.id}, is late`);
+        }
+        
+     
+        const percentage = score / currentAssignment.points_possible;
+        learnerResult[currentAssignment.id] = percentage
+        totalWeightedScore += score
+        totalPointsPossible += currentAssignment.points_possible
+  
+       learnerResult.avg = totalWeightedScore / totalPointsPossible;
+      
+        
+      });
+      
+      results.push(learnerResult);
+
+      console.log(`Learner ${learnerId} results:`, learnerResult);
+      
+
+    });
+
+    return results;
+  }
+
+  // satisfying different loop and continue/break requirements LOL 
+// helped me realize i actually did a less efficient way/ did extra steps but i doont want to redo the work tbh 
+
+  function showSubmittedAssignments(assignmentGroup, submissions) {
+    console.log("SUBMITTED ASSIGNMENTS:");
+
+    for (let i = 0; i < submissions.length; i++) {
+
+      let submission = submissions[i];
+      let learnerId = submission.learner_id;
+      let assignmentId = submission.assignment_id;
+      
+      let assignment = assignmentGroup.assignments.find(array => array.id === assignmentId);
+      
+      if (!isAssignmentDue(assignment)) {
+        console.log( `Learner ${learnerId} assignment "${assignment.name}"  is not due yet`);
+        continue; 
+      }
+      
+      console.log(`Learner ${learnerId} completed  "${assignment.name}"`);
+    }
   }
 
 
-  
- // getLearnerData(CourseInfo, AssignmentGroup, LearnerSubmissions)
 
- seperateLearnersSubmissionsByID(LearnerSubmissions)
+ showSubmittedAssignments(AssignmentGroup,LearnerSubmissions)
+
+
+
+getLearnerData(CourseInfo, AssignmentGroup, LearnerSubmissions)  ////////****** */
+
